@@ -167,16 +167,33 @@ const App: React.FC = () => {
 
   const handleDeleteStory = async (id: string) => {
     if (!id || !user) return;
+    
+    // Find the story to get the correct authorId (Critical for admins deleting other users' stories)
+    const storyToDelete = stories.find(s => s.id === id) || (selectedStory?.id === id ? selectedStory : null);
+    
+    // Default to user.id if authorId is missing (e.g., self-created story)
+    const targetAuthorId = storyToDelete?.authorId || user.id;
+
     if (window.confirm("Are you sure you want to delete this story? This action cannot be undone.")) {
+      try {
         // Optimistic update
-      setStories(prev => prev.filter(s => s.id !== id));
-      await deleteStory(id, user.id); 
-      
-      if (currentView === 'view' && selectedStory?.id === id) {
-        setSelectedStory(null);
-        setCurrentView('feed');
+        setStories(prev => prev.filter(s => s.id !== id));
+        
+        // Use targetAuthorId to construct correct path: /users/{authorId}/stories/{storyId}
+        await deleteStory(id, targetAuthorId); 
+        
+        if (currentView === 'view' && selectedStory?.id === id) {
+          setSelectedStory(null);
+          // Go to dashboard if it was my story, otherwise feed
+          setCurrentView(targetAuthorId === user.id ? 'dashboard' : 'feed');
+        }
+        
+        setTimeout(() => refreshData(), 200);
+      } catch (error) {
+        console.error("Failed to delete story", error);
+        alert("Failed to delete story. Please try again.");
+        refreshData(); // Revert
       }
-      setTimeout(() => refreshData(), 50);
     }
   };
 
