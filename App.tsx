@@ -165,14 +165,15 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
   };
 
-  const handleDeleteStory = async (id: string) => {
+  const handleDeleteStory = async (id: string, authorId?: string) => {
     if (!id || !user) return;
     
-    // Find the story to get the correct authorId (Critical for admins deleting other users' stories)
-    const storyToDelete = stories.find(s => s.id === id) || (selectedStory?.id === id ? selectedStory : null);
-    
-    // Default to user.id if authorId is missing (e.g., self-created story)
-    const targetAuthorId = storyToDelete?.authorId || user.id;
+    // Explicit authorId (preferred) or lookup
+    let targetAuthorId = authorId;
+    if (!targetAuthorId) {
+         const storyToDelete = stories.find(s => s.id === id) || (selectedStory?.id === id ? selectedStory : null);
+         targetAuthorId = storyToDelete?.authorId || user.id;
+    }
 
     if (window.confirm("Are you sure you want to delete this story? This action cannot be undone.")) {
       try {

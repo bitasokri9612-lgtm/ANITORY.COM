@@ -4,7 +4,7 @@ import { Trash2, Star, Eye } from 'lucide-react';
 
 interface AdminPanelProps {
   stories: Story[];
-  onDelete: (id: string) => void;
+  onDelete: (id: string, authorId?: string) => void;
   onToggleFeature: (id: string) => void;
   onView: (id: string) => void;
 }
@@ -79,7 +79,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ stories, onDelete, onToggleFeat
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDelete(story.id);
+                          onDelete(story.id, story.authorId);
                         }}
                         className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                         title="Delete Story"

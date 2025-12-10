@@ -9,7 +9,7 @@ interface StoryViewProps {
   user: UserProfile;
   onBack: () => void;
   onLike: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, authorId?: string) => void;
   onEdit: (story: Story) => void;
 }
 
@@ -148,7 +148,7 @@ const StoryView: React.FC<StoryViewProps> = ({ story, user, onBack, onLike, onDe
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(story.id);
+                    onDelete(story.id, story.authorId);
                   }}
                   className="p-2 text-stone-500 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                   title="Delete Story"

@@ -6,7 +6,7 @@ interface DashboardProps {
   user: UserProfile;
   userStories: Story[];
   onEdit: (story: Story) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, authorId?: string) => void;
   onCreate: () => void;
   onView: (id: string) => void;
 }
@@ -14,12 +14,15 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ user, userStories, onEdit, onDelete, onCreate, onView }) => {
   const totalLikes = userStories.reduce((acc, story) => acc + (story.likes || 0), 0);
   const totalViews = userStories.reduce((acc, story) => acc + (story.views || 0), 0);
+  
+  // Safely get first name
+  const firstName = user.name ? user.name.split(' ')[0] : 'Storyteller';
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-ink">Welcome back, {user.name.split(' ')[0]}</h1>
+          <h1 className="text-3xl font-serif font-bold text-ink">Welcome back, {firstName}</h1>
           <p className="text-stone-500 mt-1">Here's how your stories are performing.</p>
         </div>
         <button 
@@ -112,7 +115,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, userStories, onEdit, onDele
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(story.id);
+                      // Safely pass current user ID as the author, ensuring delete always targets the right path
+                      onDelete(story.id, user.id);
                     }}
                     className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                     title="Delete"

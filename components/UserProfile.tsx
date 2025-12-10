@@ -10,10 +10,10 @@ interface UserProfileProps {
 }
 
 const UserProfileView: React.FC<UserProfileProps> = ({ user, onUpdate }) => {
-  const [name, setName] = useState(user.name);
-  const [bio, setBio] = useState(user.bio);
-  const [avatar, setAvatar] = useState(user.avatar);
-  const [role, setRole] = useState(user.role);
+  const [name, setName] = useState(user.name || '');
+  const [bio, setBio] = useState(user.bio || '');
+  const [avatar, setAvatar] = useState(user.avatar || '');
+  const [role, setRole] = useState(user.role || 'user');
   const [isSaved, setIsSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 

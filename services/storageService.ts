@@ -41,11 +41,21 @@ export const getUserProfile = async (uid: string, email: string | null, displayN
   const userSnap = await getDoc(userRef);
 
   if (userSnap.exists()) {
-    return userSnap.data() as UserProfile;
+    const data = userSnap.data();
+    // Sanitize data to ensure all required fields exist and are not undefined
+    return {
+        id: uid,
+        name: data.name || displayName || 'Storyteller',
+        bio: data.bio || '',
+        avatar: data.avatar || `https://ui-avatars.com/api/?name=${data.name || 'User'}&background=d97757&color=fff`,
+        role: data.role || 'user',
+        email: data.email || email || '',
+        likedStories: data.likedStories || []
+    } as UserProfile;
   } else {
     const newUser: UserProfile = {
       id: uid,
-      name: displayName || email?.split('@')[0] || 'Storyteller',
+      name: displayName || (email ? email.split('@')[0] : 'Storyteller'),
       bio: 'I am a new storyteller on Anitory.',
       avatar: `https://ui-avatars.com/api/?name=${displayName || 'User'}&background=d97757&color=fff`,
       role: 'user', 
@@ -239,7 +249,7 @@ export const addComment = async (story: Story, text: string, user: UserProfile):
       const currentComments = snap.data().comments || [];
       const newComment: Comment = {
         id: crypto.randomUUID(),
-        author: user.name,
+        author: user.name || 'Anonymous',
         authorId: user.id,
         text,
         createdAt: Date.now()

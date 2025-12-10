@@ -148,7 +148,7 @@ const StoryEditor: React.FC<StoryEditorProps> = ({ initialStory, onSave, onCance
     setResearchData(null); 
     
     try {
-      const query = title || content.split(' ').slice(0, 50).join(' ');
+      const query = title || (content || '').split(' ').slice(0, 50).join(' ');
       const result = await getResearchContext(query);
       setResearchData(result);
     } catch (e) {
@@ -228,10 +228,13 @@ const StoryEditor: React.FC<StoryEditorProps> = ({ initialStory, onSave, onCance
             generatedTranscript = content;
         }
 
+        const safeContent = content || '';
+        const wordCount = safeContent.split(' ').length || 0;
+
         const newStory: Story = {
         id: initialStory?.id || crypto.randomUUID(),
         title,
-        content,
+        content: safeContent,
         storyUrl, // Ensure this field is passed
         insights: generatedInsights, // Ensure insights are saved
         transcript: generatedTranscript, // Ensure transcript is saved
@@ -241,7 +244,7 @@ const StoryEditor: React.FC<StoryEditorProps> = ({ initialStory, onSave, onCance
         tags,
         likes: initialStory?.likes || 0,
         views: initialStory?.views || 0,
-        readTimeMinutes: Math.max(1, Math.ceil((content?.split(' ').length || 0) / 200)),
+        readTimeMinutes: Math.max(1, Math.ceil(wordCount / 200)),
         coverImage: coverImage || `https://picsum.photos/800/400?random=${Math.floor(Math.random() * 1000)}`,
         comments: initialStory?.comments || []
         };
