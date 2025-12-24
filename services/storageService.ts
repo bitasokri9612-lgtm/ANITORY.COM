@@ -1,3 +1,4 @@
+
 import { Story, UserProfile, Comment } from '../types';
 import { db } from './firebase';
 import { 
@@ -42,7 +43,6 @@ export const getUserProfile = async (uid: string, email: string | null, displayN
 
   if (userSnap.exists()) {
     const data = userSnap.data();
-    // Sanitize data to ensure all required fields exist and are not undefined
     return {
         id: uid,
         name: data.name || displayName || 'Storyteller',
@@ -76,19 +76,17 @@ export const updateUserProfile = async (user: UserProfile): Promise<void> => {
 
 // --- Stories ---
 
-// Helper for fallback fetching when collectionGroup fails
 const getStoriesFallback = async (): Promise<Story[]> => {
     try {
         const usersRef = collection(db, 'users');
         const usersSnap = await getDocs(usersRef);
         const allStories: Story[] = [];
         
-        // Fetch stories for each user
         const promises = usersSnap.docs.map(async (userDoc) => {
              try {
                  const storiesRef = collection(db, "users", userDoc.id, "stories");
                  const storiesSnap = await getDocs(storiesRef);
-                 return storiesSnap.docs.map(d => d.data() as Story);
+                 return storiesSnap.docs.map(d => ({ ...d.data(), authorId: userDoc.id } as Story));
              } catch (e) {
                  return [];
              }
@@ -96,47 +94,29 @@ const getStoriesFallback = async (): Promise<Story[]> => {
 
         const results = await Promise.all(promises);
         results.forEach(stories => allStories.push(...stories));
-        
-        // Sort by date descending
         return allStories.sort((a, b) => b.createdAt - a.createdAt);
     } catch(e: any) {
-        // Suppress permission errors to avoid console noise
-        if (e.code !== 'permission-denied') {
-             console.warn("Fallback fetch failed", e);
-        }
         return [];
     }
 };
 
-/**
- * Fetches all stories from all users (Feed) using Collection Group Query
- * Falls back to iterative fetch if permissions/indexes are missing.
- */
 export const getStories = async (currentUserId?: string): Promise<Story[]> => {
   try {
     const storiesQuery = query(collectionGroup(db, 'stories'), orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(storiesQuery);
     return querySnapshot.docs.map(doc => doc.data() as Story);
   } catch (e: any) {
-    // Common errors for collectionGroup without index/rules
     if (e.code === 'permission-denied' || e.code === 'failed-precondition' || e.code === 'unavailable') {
         const fallbackResult = await getStoriesFallback();
-        
-        // If fallback also failed (likely due to strict rules) and we have a user ID,
-        // at least return their own stories so the feed isn't empty.
         if (fallbackResult.length === 0 && currentUserId) {
             return await getStoriesByAuthor(currentUserId);
         }
         return fallbackResult;
     }
-    console.error("Error fetching global stories:", e);
     return [];
   }
 };
 
-/**
- * Fetches stories for a specific user from their subcollection
- */
 export const getStoriesByAuthor = async (authorId: string): Promise<Story[]> => {
   try {
     const storiesRef = collection(db, "users", authorId, "stories");
@@ -144,14 +124,12 @@ export const getStoriesByAuthor = async (authorId: string): Promise<Story[]> => 
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as Story);
   } catch (e) {
-    console.error("Error fetching author stories:", e);
     return [];
   }
 };
 
 export const getStoryById = async (authorId: string, storyId: string): Promise<Story | undefined> => {
   try {
-    // If we have authorId, query directly. Otherwise use collectionGroup
     if (authorId) {
         const docRef = doc(db, "users", authorId, "stories", storyId);
         const docSnap = await getDoc(docRef);
@@ -165,25 +143,28 @@ export const getStoryById = async (authorId: string, storyId: string): Promise<S
     }
     return undefined;
   } catch (e) {
-    console.error("Error fetching story:", e);
     return undefined;
   }
 };
 
 export const saveStory = async (story: Story): Promise<void> => {
   if (!story.authorId) throw new Error("Story must have an authorId");
-  
-  // Explicitly saving to /users/{uid}/stories
   const storyRef = doc(db, "users", story.authorId, "stories", story.id);
-  
-  // Using merge: true to update existing fields or create new ones
   await setDoc(storyRef, story, { merge: true });
   notifyUpdate('STORY_UPDATE');
 };
 
 export const deleteStory = async (storyId: string, authorId: string): Promise<void> => {
-  const storyRef = doc(db, "users", authorId, "stories", storyId);
-  await deleteDoc(storyRef);
+  try {
+    const storyRef = doc(db, "users", authorId, "stories", storyId);
+    await deleteDoc(storyRef);
+  } catch (e) {}
+
+  try {
+    const legacyStoryRef = doc(db, "stories", storyId);
+    await deleteDoc(legacyStoryRef);
+  } catch (e) {}
+
   notifyUpdate('STORY_UPDATE');
 };
 
@@ -199,7 +180,6 @@ export const toggleStoryLike = async (story: Story, userId: string): Promise<voi
   const userRef = doc(db, "users", userId);
   const storyRef = doc(db, "users", story.authorId, "stories", story.id);
 
-  // Manual read-modify-write because 'lite' SDK doesn't support arrayUnion/increment
   const [userSnap, storySnap] = await Promise.all([getDoc(userRef), getDoc(storyRef)]);
   
   if (!userSnap.exists() || !storySnap.exists()) return;
@@ -223,19 +203,35 @@ export const toggleStoryLike = async (story: Story, userId: string): Promise<voi
 
   await updateDoc(userRef, { likedStories: newLikedStories });
   await updateDoc(storyRef, { likes: newLikesCount });
-  
   notifyUpdate('STORY_UPDATE');
 };
 
 export const incrementStoryView = async (story: Story): Promise<void> => {
-  if (!story.authorId) return;
-  const storyRef = doc(db, "users", story.authorId, "stories", story.id);
-  
-  const snap = await getDoc(storyRef);
-  if (snap.exists()) {
+  // Try User Path
+  if (story.authorId) {
+    try {
+      const storyRef = doc(db, "users", story.authorId, "stories", story.id);
+      const snap = await getDoc(storyRef);
+      if (snap.exists()) {
+        const currentViews = snap.data().views || 0;
+        await updateDoc(storyRef, { views: currentViews + 1 });
+        return;
+      }
+    } catch (e) {
+      console.warn("Could not increment view in user path", e);
+    }
+  }
+
+  // Try Legacy/Root Path
+  try {
+    const rootRef = doc(db, "stories", story.id);
+    const snap = await getDoc(rootRef);
+    if (snap.exists()) {
       const currentViews = snap.data().views || 0;
-      await updateDoc(storyRef, { views: currentViews + 1 });
-      notifyUpdate('STORY_UPDATE');
+      await updateDoc(rootRef, { views: currentViews + 1 });
+    }
+  } catch (e) {
+    console.warn("Could not increment view in root path", e);
   }
 };
 
@@ -281,7 +277,6 @@ export const getDraft = (id: string): Partial<Story> | null => {
     const data = localStorage.getItem(getDraftKey(id));
     return data ? JSON.parse(data) : null;
   } catch (e) {
-    console.error("Failed to load draft", e);
     return null;
   }
 };

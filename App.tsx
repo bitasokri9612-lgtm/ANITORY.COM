@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './services/firebase';
@@ -41,11 +42,8 @@ const App: React.FC = () => {
   useEffect(() => {
     let mounted = true;
     
-    // Safety timeout: if auth takes too long, we assume not logged in or show error
     const safetyTimeout = setTimeout(() => {
         if (mounted && loading) {
-            console.warn("Auth listener timed out.");
-            // If we have no user, stop loading to show Auth screen (or error)
             setLoading(false);
         }
     }, 5000);
@@ -58,11 +56,7 @@ const App: React.FC = () => {
         try {
             const profile = await getUserProfile(firebaseUser.uid, firebaseUser.email, firebaseUser.displayName);
             if (mounted) setUser(profile);
-        } catch(e) {
-            console.error("Failed to fetch user profile", e);
-            // Even if profile fetch fails, we let them try to use the app or show error
-            // setInitError("Could not load user profile.");
-        }
+        } catch(e) {}
       } else {
         setAuthUser(null);
         setUser(null);
@@ -73,7 +67,6 @@ const App: React.FC = () => {
           clearTimeout(safetyTimeout);
       }
     }, (error) => {
-      console.error("Firebase Auth Error:", error);
       if (mounted) {
           setInitError("Authentication service unavailable.");
           setLoading(false);
@@ -91,24 +84,18 @@ const App: React.FC = () => {
   const refreshData = useCallback(async () => {
     if (!authUser) return;
     try {
-        // Pass authUser.uid to allow fallback to own stories if global fetch fails
         const fetchedStories = await getStories(authUser.uid);
         setStories(fetchedStories);
-        // Refresh user profile
         const updatedProfile = await getUserProfile(authUser.uid, authUser.email, authUser.displayName);
         setUser(updatedProfile);
-    } catch(e) {
-        console.error("Error refreshing data:", e);
-    }
+    } catch(e) {}
   }, [authUser]);
 
   useEffect(() => {
     if (!user) return;
 
-    // Initial data load
     refreshData();
 
-    // BroadcastChannel Listener
     const channel = new BroadcastChannel('anitory_realtime');
     channel.onmessage = (event: MessageEvent<BroadcastMessage>) => {
       const data = event.data;
@@ -128,7 +115,7 @@ const App: React.FC = () => {
       channel.close();
       window.removeEventListener('focus', handleFocus);
     };
-  }, [refreshData, user?.id]); // Depend on user.id to avoid loop
+  }, [refreshData, user?.id]);
 
   const handleNavigate = (page: string) => {
     if (page !== 'create') setEditingStory(undefined);
@@ -139,18 +126,22 @@ const App: React.FC = () => {
       setCurrentView(page as any);
       window.scrollTo(0,0);
     }
-    
-    refreshData();
   };
 
   const handleStoryClick = async (id: string) => {
     const story = stories.find(s => s.id === id);
     if (story) {
-        await incrementStoryView(story);
-        setSelectedStory(story);
+        // Optimistic Increment: Update local state immediately
+        const newViewCount = (story.views || 0) + 1;
+        const updatedStory = { ...story, views: newViewCount };
+
+        setStories(prev => prev.map(s => s.id === id ? updatedStory : s));
+        setSelectedStory(updatedStory);
         setCurrentView('view');
         window.scrollTo(0,0);
-        refreshData();
+
+        // Perform actual increment in background
+        incrementStoryView(story).catch(console.error);
     }
   };
 
@@ -168,7 +159,6 @@ const App: React.FC = () => {
   const handleDeleteStory = async (id: string, authorId?: string) => {
     if (!id || !user) return;
     
-    // Explicit authorId (preferred) or lookup
     let targetAuthorId = authorId;
     if (!targetAuthorId) {
          const storyToDelete = stories.find(s => s.id === id) || (selectedStory?.id === id ? selectedStory : null);
@@ -177,23 +167,15 @@ const App: React.FC = () => {
 
     if (window.confirm("Are you sure you want to delete this story? This action cannot be undone.")) {
       try {
-        // Optimistic update
         setStories(prev => prev.filter(s => s.id !== id));
-        
-        // Use targetAuthorId to construct correct path: /users/{authorId}/stories/{storyId}
         await deleteStory(id, targetAuthorId); 
         
         if (currentView === 'view' && selectedStory?.id === id) {
           setSelectedStory(null);
-          // Go to dashboard if it was my story, otherwise feed
           setCurrentView(targetAuthorId === user.id ? 'dashboard' : 'feed');
         }
-        
-        setTimeout(() => refreshData(), 200);
       } catch (error) {
-        console.error("Failed to delete story", error);
-        alert("Failed to delete story. Please try again.");
-        refreshData(); // Revert
+        refreshData();
       }
     }
   };
@@ -239,7 +221,6 @@ const App: React.FC = () => {
     );
   }
 
-  // If initialization failed severely
   if (initError) {
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#fdfbf7] p-4">
@@ -260,7 +241,6 @@ const App: React.FC = () => {
       );
   }
 
-  // If not logged in, show Auth screen
   if (!user) {
     return <Auth />;
   }
@@ -273,6 +253,8 @@ const App: React.FC = () => {
             featuredStories={stories.filter(s => s.isFeatured)} 
             onNavigate={handleNavigate}
             onStoryClick={handleStoryClick}
+            user={user}
+            onDelete={handleDeleteStory}
           />
         );
 
@@ -320,7 +302,6 @@ const App: React.FC = () => {
            return <div className="p-8 text-center text-red-500">Story not found.</div>;
         }
         
-        // Ensure we have the latest version of the story from the list
         const reactiveStory = stories.find(s => s.id === selectedStory.id) || selectedStory;
         
         return (
@@ -372,6 +353,8 @@ const App: React.FC = () => {
                     story={story} 
                     onClick={handleStoryClick} 
                     isLiked={user.likedStories.includes(story.id)}
+                    currentUser={user}
+                    onDelete={handleDeleteStory}
                   />
                 </div>
               ))}

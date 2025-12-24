@@ -1,5 +1,5 @@
 import React from 'react';
-import { Story } from '../types';
+import { Story, UserProfile } from '../types';
 import StoryCard from './StoryCard';
 import { ArrowRight, Sparkles, Youtube } from 'lucide-react';
 
@@ -7,9 +7,11 @@ interface HomeProps {
   featuredStories: Story[];
   onNavigate: (page: string) => void;
   onStoryClick: (id: string) => void;
+  user?: UserProfile | null;
+  onDelete?: (id: string, authorId?: string) => void;
 }
 
-const Home: React.FC<HomeProps> = ({ featuredStories, onNavigate, onStoryClick }) => {
+const Home: React.FC<HomeProps> = ({ featuredStories, onNavigate, onStoryClick, user, onDelete }) => {
   return (
     <div className="animate-fade-in">
       {/* Hero Section */}
@@ -93,7 +95,13 @@ const Home: React.FC<HomeProps> = ({ featuredStories, onNavigate, onStoryClick }
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {featuredStories.map(story => (
-              <StoryCard key={story.id} story={story} onClick={onStoryClick} />
+              <StoryCard 
+                key={story.id} 
+                story={story} 
+                onClick={onStoryClick} 
+                currentUser={user}
+                onDelete={onDelete}
+              />
             ))}
           </div>
           

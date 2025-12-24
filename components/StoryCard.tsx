@@ -1,14 +1,18 @@
 import React from 'react';
-import { Story } from '../types';
-import { Clock, Heart, Star, Eye, MessageCircle } from 'lucide-react';
+import { Story, UserProfile } from '../types';
+import { Clock, Heart, Star, Eye, MessageCircle, Trash2 } from 'lucide-react';
 
 interface StoryCardProps {
   story: Story;
   onClick: (id: string) => void;
   isLiked?: boolean;
+  currentUser?: UserProfile | null;
+  onDelete?: (id: string, authorId?: string) => void;
 }
 
-const StoryCard: React.FC<StoryCardProps> = ({ story, onClick, isLiked }) => {
+const StoryCard: React.FC<StoryCardProps> = ({ story, onClick, isLiked, currentUser, onDelete }) => {
+  const canDelete = currentUser && (currentUser.id === story.authorId || currentUser.role === 'admin');
+
   return (
     <article 
       className="bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-stone-100 cursor-pointer group flex flex-col h-full relative"
@@ -71,6 +75,19 @@ const StoryCard: React.FC<StoryCardProps> = ({ story, onClick, isLiked }) => {
               <Heart className={`w-3 h-3 mr-1 ${isLiked ? 'fill-current' : ''}`} />
               {story.likes || 0}
             </span>
+            {canDelete && onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(story.id, story.authorId);
+                }}
+                className="ml-1 p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                title="Delete Story"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
